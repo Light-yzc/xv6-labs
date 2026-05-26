@@ -104,4 +104,7 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  // sandbox use
+  int syscall_mask;
+  char white_list_path[MAXPATH];
 };

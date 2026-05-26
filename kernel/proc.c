@@ -110,7 +110,6 @@ static struct proc*
 allocproc(void)
 {
   struct proc *p;
-
   for(p = proc; p < &proc[NPROC]; p++) {
     acquire(&p->lock);
     if(p->state == UNUSED) {
@@ -124,6 +123,8 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  p->syscall_mask = 0;
+
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -272,7 +273,9 @@ kfork(void)
     return -1;
   }
   np->sz = p->sz;
-
+  // cp mask;
+  np->syscall_mask = p->syscall_mask;
+  strncpy(np->white_list_path, p->white_list_path, sizeof(p->white_list_path));
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 
