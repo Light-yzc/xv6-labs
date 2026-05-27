@@ -1,0 +1,18 @@
+For every page table entry in the print_pgtbl output, explain what it logically contains and what its permission bits are. Figure 3.4 in the xv6 book might be helpful, although note that the figure might have a slightly different set of pages than process that's being inspected here. Note that xv6 doesn't place the virtual pages consecutively in physical memory.
+
+va 0x3FFFFFD000 pte 0x0 pa 0x0 perm 0x0
+va 0x3FFFFFE000 pte 0x21FD08C7 pa 0x87F42000 perm 0xC7
+va 0x3FFFFFF000 pte 0x2000184B pa 0x80006000 perm 0x4B
+
+0x3FFFFFD000 is the USYSCALL slot. Its PTE is zero, so it is not mapped in this output; perm 0 means invalid/no permissions.
+
+0x3FFFFFE000 is the TRAPFRAME page for the process. It maps to physical address 0x87F42000. perm 0xC7 means V|R|W plus hardware A and D bits. It is not user-accessible and not executable.
+
+0x3FFFFFF000 is the TRAMPOLINE page. It maps to physical address 0x80006000. perm 0x4B means V|R|X plus hardware A bit. It is not writable and not user-accessible.
+
+
+Which other xv6 system call(s) could be made faster using this shared page? Explain how.
+
+uptime could be sped up. The kernel could place the current tick count in a read-only shared page, similar to the pid field used by ugetpid. A user-level uuptime() could then read the tick count directly without trapping into the kernel. The kernel would update the shared value whenever ticks changes.
+
+

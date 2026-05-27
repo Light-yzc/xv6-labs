@@ -5,7 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
-
+#include "memlayout.h"
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
@@ -93,7 +93,6 @@ int
 allocpid()
 {
   int pid;
-  
   acquire(&pid_lock);
   pid = nextpid;
   nextpid = nextpid + 1;
@@ -123,6 +122,8 @@ allocproc(void)
 
 found:
   p->pid = allocpid();
+  p->usyscall = (struct usyscall *)kalloc();
+  p->usyscall->pid = p->pid;
   p->state = USED;
 
   // Allocate a trapframe page.
@@ -202,6 +203,15 @@ proc_pagetable(struct proc *p)
     return 0;
   }
 
+  // allocate usyscall
+  if(mappages(pagetable, USYSCALL, PGSIZE,
+              (uint64)(p->usyscall), PTE_U | PTE_R) < 0){
+    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    uvmunmap(pagetable, TRAPFRAME, 1, 0);
+    uvmfree(pagetable, 0);
+    return 0;
+  }
+
   return pagetable;
 }
 
@@ -212,6 +222,7 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmunmap(pagetable, USYSCALL, 1, 0);
   uvmfree(pagetable, sz);
 }
 

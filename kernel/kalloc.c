@@ -23,11 +23,48 @@ struct {
   struct run *freelist;
 } kmem;
 
+
+struct {
+  struct spinlock lock;
+  struct run *freelist;
+} super_kmem;
+
+uint64 stop_addr;
+uint64 super_start;
+
+void superfreerange(void *pa_start, void *pa_end) {
+  char *p;
+  p = (char*)SUPERPGROUNDUP((uint64)pa_start);
+  for(; p + SUPERPGSIZE <= (char*)pa_end; p += SUPERPGSIZE)
+    superkfree(p);
+}
+
+void superkfree(void *pa) {
+    struct run *r;
+
+    if(((uint64)pa % SUPERPGSIZE) != 0 || (uint64)pa < super_start || (uint64)pa >= PHYSTOP)
+      panic("kfree");
+
+    // Fill with junk to catch dangling refs.
+    memset(pa, 1, SUPERPGSIZE);
+
+    r = (struct run*)pa;
+
+    acquire(&super_kmem.lock);
+    r->next = super_kmem.freelist;
+    super_kmem.freelist = r;
+    release(&super_kmem.lock);
+}
+
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
-  freerange(end, (void*)PHYSTOP);
+  initlock(&super_kmem.lock, "super_kmem");
+  stop_addr = PHYSTOP;
+  super_start = stop_addr - SUPERPGSIZE * 32;
+  freerange(end, (void *)super_start);
+  superfreerange((void *)super_start, (void*)PHYSTOP);
 }
 
 void
@@ -39,6 +76,8 @@ freerange(void *pa_start, void *pa_end)
     kfree(p);
 }
 
+
+
 // Free the page of physical memory pointed at by pa,
 // which normally should have been returned by a
 // call to kalloc().  (The exception is when
@@ -48,7 +87,7 @@ kfree(void *pa)
 {
   struct run *r;
 
-  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+  if(((uint64)pa % PGSIZE) != 0)
     panic("kfree");
 
   // Fill with junk to catch dangling refs.
@@ -78,5 +117,20 @@ kalloc(void)
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
+  return (void*)r;
+}
+
+
+void * super_kalloc(void) {
+  struct run *r;
+
+  acquire(&super_kmem.lock);
+  r = super_kmem.freelist;
+  if(r)
+    super_kmem.freelist = r->next;
+  release(&super_kmem.lock);
+
+  if(r)
+    memset((char*)r, 5, PGSIZE*512); // fill with junk
   return (void*)r;
 }

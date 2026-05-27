@@ -207,11 +207,17 @@ void            virtio_disk_intr(void);
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
 
 
+// kalloc.c
+void*           super_kalloc(void);
+void            superkfree(void *);
+
 
 #ifdef LAB_PGTBL
 // vmcopyin.c
 int             copyin_new(pagetable_t, char *, uint64, uint64);
 int             copyinstr_new(pagetable_t, char *, uint64, uint64);
+uint64 super_uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz);
+
 #endif
 
 #ifdef LAB_LOCK
