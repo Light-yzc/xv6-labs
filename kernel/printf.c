@@ -149,3 +149,18 @@ printfinit(void)
 {
   initlock(&pr.lock, "pr");
 }
+
+void backtrace(void) {
+  printf("backtrace:\n");
+  uint64 *s0 = (uint64 *)r_fp();
+  uint64 up = PGROUNDUP((uint64)s0);
+  uint64 down = PGROUNDDOWN((uint64)s0);
+  while ((uint64)s0 > (down + 16) && (uint64)s0 <up)
+  {
+    uint64 *ra = s0 - 1;
+    // if((uint64)*ra >= down && (uint64)*ra <= up) {
+    printf("%p\n",(void *)*ra);
+    // }
+    s0 = (uint64 *)*(uint64 *)(s0 - 2);
+  }
+}

@@ -47,9 +47,11 @@ usertrap(void)
   w_stvec((uint64)kernelvec);  //DOC: kernelvec
 
   struct proc *p = myproc();
-  
+
   // save user program counter.
   p->trapframe->epc = r_sepc();
+  
+
   
   if(r_scause() == 8){
     // system call
@@ -68,6 +70,16 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+    if (which_dev == 2) {
+        p->tick_has_pasd += 1;
+        if (p->tick_has_pasd >= p->tick && p->tick !=0 && p->in_alarm == 0) {
+          p->alarm_trapframe = *p->trapframe;
+          p->trapframe->epc = p->fn;
+          p->tick_has_pasd = 0;
+          p->in_alarm = 1;
+        }
+    }
+
   } else if((r_scause() == 15 || r_scause() == 13) &&
             vmfault(p->pagetable, r_stval(), (r_scause() == 13)? 1 : 0) != 0) {
     // page fault on lazily-allocated page
