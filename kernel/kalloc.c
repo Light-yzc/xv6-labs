@@ -18,6 +18,13 @@ struct run {
   struct run *next;
 };
 
+struct 
+{
+  struct spinlock lock;
+  int cnt[PHYSTOP / PGSIZE];
+} pa_cnt;
+
+
 struct {
   struct spinlock lock;
   struct run *freelist;
@@ -27,6 +34,7 @@ void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+  initlock(&pa_cnt.lock,"pa_lock");
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -47,19 +55,27 @@ void
 kfree(void *pa)
 {
   struct run *r;
-
+  int pa_counter = 0;
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
   // Fill with junk to catch dangling refs.
+  acquire(&pa_cnt.lock);
+  pa_counter = pa_cnt.cnt[(uint64)pa / PGSIZE];
+  release(&pa_cnt.lock);
+  if (pa_counter <= 1) {
+  pa_cnt.cnt[(uint64)pa / PGSIZE] = 0;
   memset(pa, 1, PGSIZE);
-
   r = (struct run*)pa;
-
   acquire(&kmem.lock);
   r->next = kmem.freelist;
   kmem.freelist = r;
   release(&kmem.lock);
+    } else{
+        acquire(&pa_cnt.lock);
+        pa_cnt.cnt[(uint64)pa / PGSIZE] -= 1;
+        release(&pa_cnt.lock);
+    }
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -75,8 +91,20 @@ kalloc(void)
   if(r)
     kmem.freelist = r->next;
   release(&kmem.lock);
-
+  if(r){
+    acquire(&pa_cnt.lock);
+    pa_cnt.cnt[(uint64)r / PGSIZE] = 1;
+    release(&pa_cnt.lock);
+    }
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
+}
+
+
+void pa_cnt_inc(uint64 pa) {
+  acquire(&pa_cnt.lock);
+  pa_cnt.cnt[pa / PGSIZE] += 1;
+  release(&pa_cnt.lock);
+
 }
