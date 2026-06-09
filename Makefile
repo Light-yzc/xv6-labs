@@ -195,7 +195,8 @@ UPROGS=\
 	$U/_logstress\
 	$U/_forphan\
 	$U/_dorphan\
-
+	$U/_symlinktest\
+# 	$u/_symlink\
 
 
 ifeq ($(LAB),util)

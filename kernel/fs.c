@@ -407,6 +407,7 @@ bmap(struct inode *ip, uint bn)
 {
   uint addr, *a;
   struct buf *bp;
+  uint add_1;
 
   if(bn < NDIRECT){
     if((addr = ip->addrs[bn]) == 0){
@@ -419,25 +420,89 @@ bmap(struct inode *ip, uint bn)
   }
   bn -= NDIRECT;
 
-  if(bn < NINDIRECT){
-    // Load indirect block, allocating if necessary.
-    if((addr = ip->addrs[NDIRECT]) == 0){
+  // if(bn < NINDIRECT){
+  //   // Load indirect block, allocating if necessary.
+  //   if((addr = ip->addrs[NDIRECT]) == 0){
+  //     addr = balloc(ip->dev);
+  //     if(addr == 0)
+  //       return 0;
+  //     ip->addrs[NDIRECT] = addr;
+  //   }
+  //   bp = bread(ip->dev, addr);
+  //   a = (uint*)bp->data;
+  //   if((addr = a[bn]) == 0){
+  //     addr = balloc(ip->dev);
+  //     if(addr){
+  //       a[bn] = addr;
+  //       log_write(bp);
+  //     }
+  //   }
+  //   brelse(bp);
+  //   return addr;
+  // }
+  // printf("%d, %d, %ld ", bn, NDIRECT, (NDINDIRECT + NINDIRECT));
+  if(bn < NDINDIRECT + NINDIRECT) {
+    if((addr = ip->addrs[NDIRECT]) == 0) {
       addr = balloc(ip->dev);
       if(addr == 0)
         return 0;
       ip->addrs[NDIRECT] = addr;
     }
-    bp = bread(ip->dev, addr);
-    a = (uint*)bp->data;
-    if((addr = a[bn]) == 0){
-      addr = balloc(ip->dev);
-      if(addr){
-        a[bn] = addr;
-        log_write(bp);
+    if(bn < NINDIRECT){
+      bp = bread(ip->dev, addr);
+      a = (uint*)bp->data;
+      if((addr = a[bn]) == 0){
+        addr = balloc(ip->dev);
+        if(addr){
+          a[bn] = addr;
+          log_write(bp);
+        }
       }
+      brelse(bp);
+      return addr;
     }
-    brelse(bp);
-    return addr;
+    if(bn >= NINDIRECT)
+      bn -= NINDIRECT;
+    if(bn < NDINDIRECT){
+      if((add_1 = ip->addrs[NDIRECT + 1]) == 0) {
+      add_1 = balloc(ip->dev);
+      if(add_1 == 0)
+        return 0;
+      ip->addrs[NDIRECT+1] = add_1;
+      }
+      struct buf *bp1;
+      uint fis_bn = bn / NINDIRECT; // 257 / 256 = 1
+      uint sec_bn = bn % NINDIRECT;  // 257 % 256 = 1
+      bp = bread(ip->dev, add_1);
+      a = (uint*)bp->data;
+      if((addr = a[fis_bn]) == 0){
+        addr = balloc(ip->dev);
+        if(addr == 0){
+            brelse(bp);
+            return 0;
+          }
+        a[fis_bn] = addr;
+        log_write(bp);
+        //
+      }
+      bp1 = bread(ip->dev, addr);
+      a = (uint*)bp1->data;
+      if((addr = a[sec_bn]) == 0){
+        addr = balloc(ip->dev);
+        if(addr == 0){
+            brelse(bp);
+            brelse(bp1);
+            return 0;
+          }
+        a[sec_bn] = addr;
+        log_write(bp1);
+
+        //
+      }
+      brelse(bp);
+      brelse(bp1);
+    }
+    return addr; 
   }
 
   panic("bmap: out of range");
