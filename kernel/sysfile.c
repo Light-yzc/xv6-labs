@@ -16,6 +16,8 @@
 #include "file.h"
 #include "fcntl.h"
 
+
+
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
 static int
@@ -502,4 +504,118 @@ sys_pipe(void)
     return -1;
   }
   return 0;
+}
+
+
+uint64 sys_mmap(void) {
+  // return -1;
+  uint64 addr, len, off;
+  int prot, flags, fd;
+  struct file *file;
+  struct proc *p = myproc();
+  struct vma *v = 0;
+  argaddr(0, &addr);
+  argaddr(1, &len);
+  argint(2, &prot);
+  argint(3, &flags);
+  argint(4, &fd);
+  argaddr(5, &off);
+  if(addr != 0 || len <= 0 || off != 0)
+    return -1;
+
+  if(fd < 0 || fd >= NOFILE || p->ofile[fd] == 0)
+    return -1;
+  file = p->ofile[fd];
+
+  if((prot & PROT_READ) && !file->readable) return -1;
+  if((flags & MAP_SHARED) && (prot & PROT_WRITE) && !file->writable)
+    return -1;
+  for(int i = 0; i < NVMA; i++) {
+    if(p->vmas[i].valid == 0) {
+      v = &p->vmas[i];
+      break;
+    }
+  }
+if(v ==0) return -1;
+
+
+uint64 pgup_size = PGROUNDUP(len);
+// p->sz = vm_base + pgup_size;
+p->vma_lowest_addr -= pgup_size;
+v->addr = p->vma_lowest_addr;
+v->file = file;
+v->flags = flags;
+v->len = pgup_size;
+v->off = off;
+v->prot = prot;
+v->valid = 1;
+filedup(file);
+return p->vma_lowest_addr;
+}
+
+// uint64 sys_munmap(void) {
+int domunmap(uint64 addr, uint64 len)
+{
+  // uint64 addr, len;
+  // argaddr(0, &addr);
+  // argaddr(1, & len);
+  struct proc *p = myproc();
+  uint64 page_down = PGROUNDDOWN(addr);
+  uint64 page_top = page_down + PGROUNDUP(len);
+  uint64 nwrite = PGSIZE;
+  int npages = PGROUNDUP(len) / PGSIZE;
+  for(int i = 0; i < NVMA; i++) {
+    struct vma *v = &p->vmas[i];
+    if (page_down >= v->addr && page_top <= (v->addr + v->len) && v->valid) {
+    if((v->flags & MAP_SHARED) && (v->prot & PROT_WRITE)){
+      for(uint64 a = page_down; a < page_top; a += PGSIZE){
+        pte_t *pte = walk(p->pagetable, a, 0);
+        if(pte == 0 || (*pte & PTE_V) == 0)
+          continue;
+        nwrite = PGSIZE;
+        uint64 pa = PTE2PA(*pte);
+        ilock(v->file->ip);
+        uint off = v->off + (a - v->addr);
+
+        if(off >= v->file->ip->size) {
+          iunlock(v->file->ip);
+          end_op();
+          continue;
+        }
+        if(off + PGSIZE > v->file->ip->size)
+          nwrite = v->file->ip->size - off;
+        begin_op();
+        int n = writei(v->file->ip, 0, pa,
+                      off, nwrite);
+        end_op();
+        iunlock(v->file->ip);
+        
+        if(n < 0)
+          return -1;
+      }
+  }
+  uvmunmap(p->pagetable, page_down, npages, 1);
+  if(page_down == v->addr && page_top == (v->addr + v->len)) {
+      fileclose(v->file);
+      v->valid = 0;
+  }
+  else if (page_down == v->addr) {
+    v->off += PGROUNDUP(len);
+    v->addr = page_top;
+    v->len = v->len - PGROUNDUP(len);
+  } else if(page_top == (v->addr + v->len)) {
+    v->len = v->len - PGROUNDUP(len);
+  } else return -1;
+  return 0;
+    }
+    }
+  return -1;
+  } 
+
+uint64 sys_munmap(void){
+  uint64 addr;
+  int len;
+  argaddr(0, &addr);
+  argint(1, &len);
+  return domunmap(addr, len);
 }

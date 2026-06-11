@@ -242,3 +242,6 @@ void            netinit(void);
 void            net_rx(char *buf, int len);
 
 #endif
+
+
+int domunmap(uint64 addr, uint64 len);

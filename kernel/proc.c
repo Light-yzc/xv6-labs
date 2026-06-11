@@ -5,7 +5,6 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
-
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
@@ -124,7 +123,7 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
-
+  p->vma_lowest_addr = TRAPFRAME;
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
     freeproc(p);
@@ -284,7 +283,13 @@ kfork(void)
     if(p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
-
+  for(i = 0; i < NVMA; i++) {
+    np->vmas[i] = p->vmas[i];
+    if(np->vmas[i].valid) {
+      filedup(np->vmas[i].file);
+    }
+  }
+  np->vma_lowest_addr = p->vma_lowest_addr;
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
@@ -336,7 +341,11 @@ kexit(int status)
       p->ofile[fd] = 0;
     }
   }
-
+  for(int i = 0; i < NVMA; i++){
+    if(p->vmas[i].valid){
+      domunmap(p->vmas[i].addr, p->vmas[i].len);      
+    }
+  }
   begin_op();
   iput(p->cwd);
   end_op();
